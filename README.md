@@ -16,6 +16,7 @@ In the appsettings.json you can define
 
 ## Included
 - LPR Mock Server
+  - Conditional rejection of print jobs controlled by Print Filters over REST API
 - REST(like) API to
   - List Printjobs, Purge Print queue.
   - get LPR Endpoint (Bound IP + Port)
