@@ -15,8 +15,6 @@ namespace LPRMock.Services
 
         private TcpListener server;
 
-        public string? BoundEndpoint => server.LocalEndpoint.ToString();
-
         public LPRService(ILogger<LPRService> logger, IConfiguration configuration)
         {
             this.logger = logger;
@@ -58,6 +56,8 @@ namespace LPRMock.Services
             server = new TcpListener(localAddr, port);
         }
 
+        public string? BoundEndpoint => server.LocalEndpoint.ToString();
+
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
@@ -88,9 +88,10 @@ namespace LPRMock.Services
                     // 1 control file
                     // 2 data file
                     ushort mode = 0;
-                    PrintJob printJob = new PrintJob();
 
                     NetworkStream stream = client.GetStream();
+
+                    PrintJob? printJob = new PrintJob();
 
                     while (stream.Socket.Connected && !stoppingToken.IsCancellationRequested)
                     {
@@ -103,7 +104,7 @@ namespace LPRMock.Services
 
                         if (mode == 2)
                         {
-                            printJob.Payload = data.TrimEnd('\0');
+                            printJob.Payload = data;
                             mode = 0;
                             stream.Acknowledge();
                             break;
@@ -121,16 +122,25 @@ namespace LPRMock.Services
                             {
                                 case '\u0002': // 2
                                 {
-                                    if (readByteCount == 6)
+                                    if (string.IsNullOrEmpty(printJob.PrinterQueue))
                                     {
-                                        // Receive a printer job
                                         printJob.PrinterQueue = commandPayload;
 
+                                        if (PrintFilter.allowedPrinternames.Any())
+                                        {
+                                            if (!PrintFilter.allowedPrinternames.Contains(commandPayload))
+                                            {
+                                                stream.Refuse();
+                                                stream.Dispose();
+
+                                                printJob.RejectReason = nameof(PrintFilter.allowedPrinternames);
+                                                break;
+                                            }
+                                        }
                                         stream.Acknowledge();
                                         break;
                                     }
-
-                                    if (readByteCount == 19)
+                                    else
                                     {
                                         // Receive control file
                                         mode = 1;
@@ -141,19 +151,37 @@ namespace LPRMock.Services
                                         stream.Acknowledge();
                                         break;
                                     }
-
-                                    break;
                                 }
                                 case 'H':
                                 {
                                     // Host name (source)
                                     printJob.SourceHost = commandPayload;
+
+                                    if (PrintFilter.allowedHosts.Any())
+                                    {
+                                        if (!PrintFilter.allowedHosts.Contains(commandPayload))
+                                        {
+                                            stream.Refuse();
+                                            stream.Dispose();
+                                            printJob.RejectReason = nameof(PrintFilter.allowedHosts);
+                                        }
+                                    }
                                     break;
                                 }
 
                                 case '\u0050': // P
                                 {
                                     printJob.User = commandPayload;
+
+                                    if (PrintFilter.allowedUsers.Any())
+                                    {
+                                        if (!PrintFilter.allowedUsers.Contains(commandPayload))
+                                        {
+                                            stream.Refuse();
+                                            stream.Dispose();
+                                            printJob.RejectReason = nameof(PrintFilter.allowedUsers);
+                                        }
+                                    }
                                     break;
                                 }
 
@@ -204,6 +232,7 @@ namespace LPRMock.Services
                                         mode = 0;
 
                                         stream.Acknowledge();
+                                        printJob.Payload = printJob.Payload.TrimEnd('\0');
                                     }
 
                                     break;
@@ -213,6 +242,7 @@ namespace LPRMock.Services
                     }
 
                     Program.Jobs.Add(printJob);
+                    
                 }
                 catch (SocketException e)
                 {

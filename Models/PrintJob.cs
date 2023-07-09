@@ -18,6 +18,7 @@
         public string User { get; set; }
         public string FileName { get; set; }
         public string Payload { get; set; } = string.Empty;
+        public string? RejectReason { get; set; }
         public DateTime timestamp { get; private set; }
     }
 }

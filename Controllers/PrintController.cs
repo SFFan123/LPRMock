@@ -10,30 +10,6 @@ namespace LPRMock.Controllers
     {
 
         [HttpGet]
-        public ActionResult<string?> Endpoint()
-        {
-            try
-            {
-                var hostedServices = Program.Services.GetServices<IHostedService>();
-                var lprService = hostedServices.FirstOrDefault(x => x is LPRService);
-                if (lprService != null)
-                {
-                    return ((LPRService)lprService).BoundEndpoint;
-                }
-                else
-                {
-                    return Problem();
-                }
-
-            }
-            catch (Exception e)
-            {
-                return Problem();
-            }
-        }
-
-
-        [HttpGet]
         public ActionResult<List<PrintJob>> List()
         {
             return Ok(Program.Jobs);
