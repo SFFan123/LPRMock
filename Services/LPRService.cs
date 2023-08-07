@@ -90,6 +90,7 @@ namespace LPRMock.Services
                     ushort mode = 0;
 
                     NetworkStream stream = client.GetStream();
+                    stream.ReadTimeout = 30 * 1000;
 
                     PrintJob? printJob = new PrintJob();
 
@@ -101,6 +102,15 @@ namespace LPRMock.Services
                             readByteCount = stream.Read(bytes, 0, bytes.Length);
                             data += Encoding.ASCII.GetString(bytes, 0, readByteCount);
                         } while (readByteCount != 0 && readByteCount == bufferSize);
+
+                        if (string.IsNullOrEmpty(data.TrimEnd('\n')))
+                        {
+                            // TCP aborted.
+                            stream.Close();
+                            stream.Dispose();
+                            client.Close();
+                            break;
+                        }
 
                         if (mode == 2)
                         {
@@ -132,6 +142,7 @@ namespace LPRMock.Services
                                             {
                                                 stream.Refuse();
                                                 stream.Dispose();
+                                                client.Close();
 
                                                 printJob.RejectReason = nameof(PrintFilter.allowedPrinternames);
                                                 break;
@@ -163,6 +174,7 @@ namespace LPRMock.Services
                                         {
                                             stream.Refuse();
                                             stream.Dispose();
+                                            client.Close();
                                             printJob.RejectReason = nameof(PrintFilter.allowedHosts);
                                         }
                                     }
@@ -179,6 +191,7 @@ namespace LPRMock.Services
                                         {
                                             stream.Refuse();
                                             stream.Dispose();
+                                            client.Close();
                                             printJob.RejectReason = nameof(PrintFilter.allowedUsers);
                                         }
                                     }
@@ -230,9 +243,8 @@ namespace LPRMock.Services
                                     if (split.EndsWith('\0'))
                                     {
                                         mode = 0;
-
                                         stream.Acknowledge();
-                                        printJob.Payload = printJob.Payload.TrimEnd('\0');
+                                        
                                     }
 
                                     break;
@@ -241,8 +253,13 @@ namespace LPRMock.Services
                         }
                     }
 
-                    Program.Jobs.Add(printJob);
-                    
+                    if (!string.IsNullOrEmpty(printJob.PrinterQueue))
+                    {
+                        printJob.Payload = printJob.Payload.TrimEnd('\n','\0');
+                        Program.Jobs.Add(printJob);
+                    }
+                        
+                    client.Close();
                 }
                 catch (SocketException e)
                 {
